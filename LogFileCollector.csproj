@@ -1,0 +1,81 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Multi-targeted on purpose:
+      net48   â€” the original target; what the Inno Setup installer and the
+                Windows scheduled task deploy.
+      net8.0  â€” the same collector on Linux and macOS. Everything it uses
+                (FileSystemWatcher, Microsoft.Data.Sqlite, HttpListener,
+                Serilog) is cross-platform; only the installer is Windows-only.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <RootNamespace>LogFileCollector</RootNamespace>
+    <AssemblyName>LogFileCollector</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <!-- Properties\AssemblyInfo.cs is kept, so do not generate a second set. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <!-- The official WATS mark, as shipped by the WATS Installer GUI. -->
+    <ApplicationIcon>Assets\WatsBee.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(TargetFramework)' == 'net48' ">
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <!--
+    Tray\ and Installer\ are separate projects that happen to live inside this
+    project's folder, so the SDK's default globs would compile the tray's WinForms
+    sources into the collector (and break the cross-platform net8.0 target with them).
+  -->
+  <ItemGroup>
+    <Compile Remove="Tray\**" />
+    <None Remove="Tray\**" />
+    <Content Remove="Tray\**" />
+    <EmbeddedResource Remove="Tray\**" />
+    <Compile Remove="Installer\**" />
+    <None Remove="Installer\**" />
+    <Content Remove="Installer\**" />
+    <EmbeddedResource Remove="Installer\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Logging -->
+    <PackageReference Include="Serilog" Version="4.3.1-dev-02385" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.1-dev-00953" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.*" />
+    <!-- SQLite -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0-rc.1.25451.107" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+    <!-- Built in from .NET Core 3.0 onwards; only net48 needs the package. -->
+    <PackageReference Include="System.Text.Json" Version="10.0.0-rc.1.25451.107" />
+    <!-- Windows service host, for the service run mode. Windows-only by nature,
+         so it stays off the cross-platform net8.0 target. -->
+    <Reference Include="System.ServiceProcess" />
+  </ItemGroup>
+
+  <!--
+    The dashboard is served from disk at runtime, so the whole WebUI folder ships
+    next to the executable. Removing it from the default None glob first keeps
+    MSBuild from seeing every file twice.
+  -->
+  <ItemGroup>
+    <None Remove="WebUI\**" />
+    <Content Include="WebUI\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Readme.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
+

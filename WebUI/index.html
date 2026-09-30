@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WATS Log File Collector</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<script src="vendor/echarts.min.js"></script>
+
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/wats.css">
+
+<style>
+  .wats-chart { height: 220px; }
+
+  /* Log tail: fixed viewport, newest at the bottom. */
+  .lfc-log {
+    height: 260px;
+    overflow: auto;
+    margin: 0;
+    padding: var(--sp-3, 12px);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--f);
+  }
+  .lfc-log .lvl-err { color: var(--r); }
+  .lfc-log .lvl-wrn { color: var(--o); }
+  .lfc-log .lvl-dbg { opacity: .6; }
+
+  /* Path cells get long; keep the row height honest. */
+  .lfc-path { max-width: 380px; }
+
+  .lfc-flow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .lfc-flow .material-icons-round { font-size: 16px; opacity: .5; }
+
+  .lfc-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .lfc-facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
+  .lfc-facts dd { margin: 0; font-size: 13px; word-break: break-all; }
+
+  .lfc-config-editor { width: 100%; min-height: 220px; }
+
+  /* The settings form needs more room than the default modal gives it. */
+  .lfc-settings-modal { width: min(760px, 94vw); }
+  .lfc-settings-modal .wats-modal-body { max-height: 70vh; overflow: auto; }
+  .lfc-settings-modal .wats-collapsible + .wats-collapsible { margin-top: 0; }
+  .lfc-settings-modal .wats-form-group + .wats-form-group { margin-top: 12px; }
+  .lfc-settings-modal .wats-desc { margin: 4px 0 0; font-size: 11.5px; }
+
+  /* Repeatable source-folder rows. */
+  .lfc-source-row { display: flex; gap: 6px; align-items: center; }
+  .lfc-source-row + .lfc-source-row { margin-top: 6px; }
+  .lfc-source-row .wats-input { flex: 1; min-width: 0; }
+
+  .lfc-source-list { display: flex; flex-direction: column; gap: 4px; }
+  .lfc-source-list .lfc-source-item { display: flex; gap: 8px; align-items: baseline; }
+  .lfc-source-list .lfc-source-item .wats-mono { word-break: break-all; }
+</style>
+</head>
+
+<body>
+<div class="wats-app">
+
+  <nav class="wats-topnav">
+    <div class="wats-logo">
+      <img src="assets/brand/WatsLogoYellow.svg" width="28" height="28" alt="">
+      WATS
+    </div>
+    <div class="wats-sep"></div>
+    <div class="wats-tabs">
+      <button class="wats-tab active" data-tab="overview" data-tab-group="main">
+        <span class="material-icons-round mi">sync_alt</span>Log File Collector
+      </button>
+    </div>
+    <div class="wats-nav-right">
+      <span class="wats-badge wats-badge-gray" id="conn-badge">Connecting…</span>
+      <button class="wats-icon-btn" data-modal-open="config" data-tooltip="Configuration">
+        <span class="material-icons-round mi">settings</span>
+      </button>
+      <button class="wats-icon-btn" data-theme-toggle data-tooltip="Toggle theme">
+        <span class="material-icons-round mi">dark_mode</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="wats-body">
+    <main class="wats-main">
+
+      <div class="wats-toolbar">
+        <span class="wats-h2" id="page-title">Collector Overview</span>
+        <div class="wats-sep-sm"></div>
+        <button class="wats-toolbar-btn primary" id="btn-rescan">
+          <span class="material-icons-round mi">refresh</span>Rescan now
+        </button>
+        <div class="wats-sep-sm"></div>
+        <div class="wats-filter-bar">
+          <span class="wats-filter-label">Activity</span>
+          <select class="wats-filter-input" id="days">
+            <option value="7">Last 7 days</option>
+            <option value="14" selected>Last 14 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+        </div>
+        <div class="ml-auto wats-dim" id="last-refresh">—</div>
+      </div>
+
+      <div class="wats-content">
+
+        <div class="wats-error" id="offline-banner" style="display:none">
+          <span class="material-icons-round mi">cloud_off</span>
+          The collector is not answering on this address. It may have stopped, or the
+          dashboard port may have changed.
+        </div>
+
+        <!-- KPI row -->
+        <div class="wats-kpi-grid" id="kpis"></div>
+
+        <div class="wats-grid wats-grid-2 mt-3">
+
+          <div class="wats-widget">
+            <div class="wats-widget-header">
+              <span class="wats-card-title">
+                <span class="material-icons-round mi">bar_chart</span>Files collected per day
+              </span>
+            </div>
+            <div class="wats-widget-body no-pad">
+              <div class="wats-chart-wrap"><div class="wats-chart" id="chart-activity"></div></div>
+            </div>
+          </div>
+
+          <div class="wats-widget">
+            <div class="wats-widget-header">
+              <span class="wats-card-title">
+                <span class="material-icons-round mi">settings_ethernet</span>Watch configuration
+              </span>
+            </div>
+            <div class="wats-widget-body">
+              <dl class="lfc-facts" id="facts"></dl>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Recent files -->
+        <div class="wats-card mt-3">
+          <div class="wats-card-header">
+            <span class="wats-card-title">
+              <span class="material-icons-round mi">table_rows</span>Recently collected
+            </span>
+            <div class="ml-auto wats-filter-bar">
+              <input type="text" class="wats-filter-input" id="search" placeholder="Filter by path…">
+            </div>
+          </div>
+          <div class="wats-table-wrap">
+            <table class="wats-table">
+              <thead><tr>
+                <th>Collected (local)</th>
+                <th>Source</th>
+                <th>Target</th>
+                <th class="text-right">Size</th>
+              </tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+          <div class="wats-empty" id="files-empty" style="display:none">
+            <span class="material-icons-round mi">inbox</span>
+            <h3>Nothing collected yet</h3>
+            <p>No file has matched the watch filter since this database was created.</p>
+            <div class="wats-empty-actions">
+              <button class="wats-btn wats-btn-secondary wats-btn-sm" id="btn-rescan-empty">Run a rescan</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log tail -->
+        <div class="wats-card mt-3">
+          <div class="wats-card-header">
+            <span class="wats-card-title">
+              <span class="material-icons-round mi">terminal</span>Log
+            </span>
+            <span class="wats-dim ml-auto wats-mono" id="log-path"></span>
+          </div>
+          <pre class="lfc-log" id="log"></pre>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="wats-modal-backdrop" id="config-backdrop" data-modal="config">
+  <div class="wats-modal lfc-settings-modal">
+    <div class="wats-modal-header">
+      <span class="wats-modal-title">Settings</span>
+      <button class="wats-icon-btn" data-modal-close="config">
+        <span class="material-icons-round mi">close</span>
+      </button>
+    </div>
+    <div class="wats-modal-body">
+
+      <div class="wats-error" id="config-error" style="display:none"></div>
+
+      <div class="wats-collapsible" data-open>
+        <div class="wats-collapsible-header">
+          Collection <span class="material-icons-round chevron">expand_more</span>
+        </div>
+        <div class="wats-collapsible-body"><div class="wats-collapsible-body-inner">
+
+          <div class="wats-form-group">
+            <label class="wats-label">Source folders</label>
+            <div id="cfg-sources"></div>
+            <button type="button" class="wats-btn wats-btn-secondary wats-btn-sm mt-2" id="cfg-add-source">
+              <span class="material-icons-round mi">add</span>Add folder
+            </button>
+            <p class="wats-desc">
+              Each is watched for new files. Local paths or UNC shares; read access is
+              enough. A folder that is not reachable yet is retried, and does not stop
+              the others.
+            </p>
+          </div>
+
+          <div class="wats-form-group">
+            <label class="wats-label" for="cfg-target">Target folder</label>
+            <input type="text" class="wats-input wats-mono" id="cfg-target"
+                   placeholder="C:\ProgramData\Virinco\WATS\OutputFolder">
+            <p class="wats-desc">Where files are copied — normally the WATS Client input folder.</p>
+          </div>
+
+          <div class="wats-grid wats-grid-2">
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-filter">File filter</label>
+              <input type="text" class="wats-input wats-mono" id="cfg-filter" placeholder="*.log">
+            </div>
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-rename">On name collision</label>
+              <select class="wats-select" id="cfg-rename">
+                <option value="counter">Add a counter — file_1.log</option>
+                <option value="timestamp">Add a timestamp — file_20260930_101500123.log</option>
+                <option value="guid">Add a random suffix — file_a12b34c5.log</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="wats-grid wats-grid-2">
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-delay">Settle delay (ms)</label>
+              <input type="number" class="wats-input" id="cfg-delay" min="0" max="600000" step="100">
+              <p class="wats-desc">Wait after a file appears, so half-written files are not copied.</p>
+            </div>
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-rescan">Periodic rescan (minutes)</label>
+              <input type="number" class="wats-input" id="cfg-rescan" min="0" max="10080" step="1">
+              <p class="wats-desc">Safety net for missed file events. 0 disables it.</p>
+            </div>
+          </div>
+
+          <label class="wats-check-row">
+            <input type="checkbox" id="cfg-subdirs"> Include subfolders
+          </label>
+
+        </div></div>
+      </div>
+
+      <div class="wats-collapsible">
+        <div class="wats-collapsible-header">
+          Logging <span class="material-icons-round chevron">expand_more</span>
+        </div>
+        <div class="wats-collapsible-body"><div class="wats-collapsible-body-inner">
+          <div class="wats-grid wats-grid-2">
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-loglevel">Level</label>
+              <select class="wats-select" id="cfg-loglevel">
+                <option value="Verbose">Verbose</option>
+                <option value="Debug">Debug</option>
+                <option value="Information">Information</option>
+                <option value="Warning">Warning</option>
+                <option value="Error">Error</option>
+              </select>
+            </div>
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-rolling">New log file</label>
+              <select class="wats-select" id="cfg-rolling">
+                <option value="Hour">Every hour</option>
+                <option value="Day">Every day</option>
+                <option value="Month">Every month</option>
+                <option value="Year">Every year</option>
+                <option value="Infinite">Never — one file</option>
+              </select>
+            </div>
+          </div>
+          <div class="wats-form-group">
+            <label class="wats-label" for="cfg-retain">Log files to keep</label>
+            <input type="number" class="wats-input" id="cfg-retain" min="1" max="1000" step="1">
+          </div>
+        </div></div>
+      </div>
+
+      <div class="wats-collapsible">
+        <div class="wats-collapsible-header">
+          Dashboard <span class="material-icons-round chevron">expand_more</span>
+        </div>
+        <div class="wats-collapsible-body"><div class="wats-collapsible-body-inner">
+          <div class="wats-form-group">
+            <label class="wats-label" for="cfg-url">Address</label>
+            <input type="text" class="wats-input wats-mono" id="cfg-url" placeholder="http://localhost:8787/">
+            <p class="wats-desc">
+              Loopback keeps the dashboard on this machine. A wider prefix such as
+              <span class="wats-mono">http://+:8787/</span> needs a URL reservation, and
+              exposes a read-only view — changes are only accepted locally.
+            </p>
+          </div>
+          <label class="wats-check-row">
+            <input type="checkbox" id="cfg-allowedit"> Allow settings to be changed from this page
+          </label>
+          <label class="wats-check-row">
+            <input type="checkbox" id="cfg-openbrowser"> Open a browser when the collector starts
+          </label>
+        </div></div>
+      </div>
+
+      <details class="mt-3">
+        <summary class="wats-desc" style="cursor:pointer">Advanced — file locations and raw JSON</summary>
+        <div class="mt-2">
+          <div class="wats-grid wats-grid-2">
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-db">Tracking database</label>
+              <input type="text" class="wats-input wats-mono" id="cfg-db">
+            </div>
+            <div class="wats-form-group">
+              <label class="wats-label" for="cfg-logfile">Log file</label>
+              <input type="text" class="wats-input wats-mono" id="cfg-logfile">
+            </div>
+          </div>
+          <p class="wats-desc">
+            Relative paths are resolved beside the configuration file
+            (<span class="wats-mono" id="config-path"></span>).
+          </p>
+          <textarea class="wats-textarea mono lfc-config-editor" id="config-json" spellcheck="false"
+                    readonly></textarea>
+          <p class="wats-desc">
+            Read-only preview of what will be written. Settings not shown above are
+            preserved exactly as they are.
+          </p>
+        </div>
+      </details>
+
+    </div>
+    <div class="wats-modal-footer">
+      <span class="wats-dim" id="config-hint">The collector reads its settings at startup — restart it to apply.</span>
+      <button class="wats-btn wats-btn-secondary ml-auto" data-modal-close="config">Cancel</button>
+      <button class="wats-btn wats-btn-primary" id="btn-save-config">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/wats.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Live data. Every number on this page comes from the collector process that
+// served it — there is no mock path.
+// ─────────────────────────────────────────────────────────────────────────────
+const POLL_MS = 5000;
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+let status = null;
+let offline = false;
+
+async function api(path, options) {
+  const res = await fetch(path, Object.assign({ cache: 'no-store' }, options));
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((body && body.error) || (res.status + ' ' + res.statusText));
+  return body;
+}
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i];
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleString();
+}
+
+function fmtAgo(iso) {
+  if (!iso) return 'never';
+  const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return Math.round(secs) + 's ago';
+  if (secs < 3600) return Math.round(secs / 60) + ' min ago';
+  if (secs < 86400) return Math.round(secs / 3600) + ' h ago';
+  return Math.round(secs / 86400) + ' d ago';
+}
+
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ── Header state ─────────────────────────────────────────────────────────────
+function setConnection(state, text) {
+  const badge = document.getElementById('conn-badge');
+  badge.className = 'wats-badge wats-badge-' + state;
+  badge.textContent = text;
+  document.getElementById('offline-banner').style.display = offline ? '' : 'none';
+}
+
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+function renderKpis(s) {
+  const t = s.totals;
+  const tiles = [
+    { label: 'Files collected (all time)', value: s.databaseCount.toLocaleString(), color: '--f',
+      sub: 'rows in the dedup database' },
+    { label: 'Copied this session',        value: t.copied.toLocaleString(),        color: '--g',
+      sub: 'since ' + fmtTime(s.startedUtc) },
+    { label: 'Skipped as duplicate',       value: t.skipped.toLocaleString(),       color: '--b',
+      sub: 'already collected earlier' },
+    { label: 'Errors',                     value: t.errors.toLocaleString(),        color: t.errors ? '--r' : '--f',
+      sub: s.lastError ? s.lastError : 'no failures recorded' },
+  ];
+  document.getElementById('kpis').innerHTML = tiles.map(t => `
+    <div class="wats-kpi-tile">
+      <div class="kpi-label">${esc(t.label)}</div>
+      <div class="kpi-value" style="color:var(${t.color})">${esc(t.value)}</div>
+      <div class="kpi-sub">${esc(t.sub)}</div>
+    </div>`).join('');
+}
+
+// ── Watch configuration panel ────────────────────────────────────────────────
+function reachability(ok) {
+  return ok
+    ? '<span class="wats-badge wats-badge-green">reachable</span>'
+    : '<span class="wats-badge wats-badge-red">unreachable</span>';
+}
+
+function renderFacts(s) {
+  // One line per source folder: with several of them, a single "reachable" badge
+  // would hide the one share that is actually down.
+  const sources = s.sources && s.sources.length
+    ? s.sources
+    : [{ path: s.sourceFolder, reachable: s.sourceReachable, watching: s.watching }];
+  const sourceHtml = `<div class="lfc-source-list">` + sources.map(src => `
+      <div class="lfc-source-item">
+        <span class="wats-mono">${esc(src.path)}</span>
+        ${reachability(src.reachable)}
+        ${src.reachable && !src.watching ? '<span class="wats-badge wats-badge-orange">attaching</span>' : ''}
+      </div>`).join('') + `</div>`;
+
+  const rows = [
+    [sources.length > 1 ? 'Sources (' + sources.length + ')' : 'Source', sourceHtml],
+    ['Target', `<span class="wats-mono">${esc(s.targetFolder)}</span> ${reachability(s.targetReachable)}`],
+    ['Filter', `<span class="wats-mono">${esc(s.filter)}</span>${s.includeSubdirectories ? ' including subfolders' : ' top folder only'}`],
+    ['Watcher', s.watching
+      ? '<span class="wats-badge wats-badge-green">running</span>'
+      : '<span class="wats-badge wats-badge-orange">not started</span>'],
+    ['Periodic rescan', s.periodicRescanMinutes > 0 ? `every ${s.periodicRescanMinutes} min` : 'disabled'],
+    ['Settle delay', `${s.fileCreatedDelayMs} ms before copying a new file`],
+    ['Name collisions', esc(s.renameStrategy || 'counter')],
+    ['Last file', s.lastCopiedPath
+      ? `<span class="wats-mono">${esc(s.lastCopiedPath)}</span><br><span class="wats-dim">${esc(fmtAgo(s.lastCopiedUtc))}</span>`
+      : '<span class="wats-dim">none this session</span>'],
+    ['Runtime', `${esc(s.framework)} · ${esc(s.machine)} · v${esc(s.version)}`],
+  ];
+  document.getElementById('facts').innerHTML =
+    rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+}
+
+// ── Recent files table ───────────────────────────────────────────────────────
+function renderRows(files) {
+  const empty = document.getElementById('files-empty');
+  const body = document.getElementById('rows');
+  empty.style.display = files.length ? 'none' : '';
+  body.innerHTML = files.map(f => `
+    <tr>
+      <td class="wats-mono">${esc(fmtTime(f.copiedAtUtc))}</td>
+      <td class="lfc-path truncate wats-mono" title="${esc(f.source)}">${esc(f.source)}</td>
+      <td class="lfc-path truncate wats-mono" title="${esc(f.target)}">${esc(f.target || '—')}</td>
+      <td class="text-right">${esc(fmtBytes(f.length))}</td>
+    </tr>`).join('');
+}
+
+// ── Log tail ─────────────────────────────────────────────────────────────────
+function renderLog(payload) {
+  document.getElementById('log-path').textContent = payload.path || '';
+  const el = document.getElementById('log');
+  const pinned = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+  el.innerHTML = payload.lines.map(line => {
+    const cls = /\bERR\b|\bFTL\b/.test(line) ? 'lvl-err'
+              : /\bWRN\b/.test(line) ? 'lvl-wrn'
+              : /\bDBG\b|\bVRB\b/.test(line) ? 'lvl-dbg' : '';
+    return `<span class="${cls}">${esc(line)}</span>`;
+  }).join('\n');
+  if (pinned) el.scrollTop = el.scrollHeight;
+}
+
+// ── Chart ────────────────────────────────────────────────────────────────────
+const charts = [];
+
+function mountChart(id, buildOption) {
+  const el = document.getElementById(id);
+  const entry = { el, buildOption, inst: echarts.init(el, WatsUI.getEChartsTheme()) };
+  entry.inst.setOption(buildOption());
+  charts.push(entry);
+  return entry;
+}
+
+let activity = [];
+
+const activityOption = () => ({
+  grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  xAxis: { type: 'category', data: activity.map(d => d.Day.slice(5)) },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [{ type: 'bar', name: 'Files', data: activity.map(d => d.Count) }],
+});
+
+document.addEventListener('wats:theme-change', () => {
+  charts.forEach(c => {
+    c.inst.dispose();
+    c.inst = echarts.init(c.el, WatsUI.getEChartsTheme());
+    c.inst.setOption(c.buildOption());
+  });
+});
+window.addEventListener('resize', () => charts.forEach(c => c.inst.resize()));
+
+// ── Refresh loop ─────────────────────────────────────────────────────────────
+async function refresh() {
+  try {
+    status = await api('/api/status');
+    offline = false;
+
+    renderKpis(status);
+    renderFacts(status);
+    setConnection(
+      status.scanning ? 'blue' : status.watching ? 'green' : 'orange',
+      status.scanning ? 'Rescanning…' : status.watching ? 'Watching' : 'Idle'
+    );
+
+    const search = document.getElementById('search').value.trim();
+    const days = document.getElementById('days').value;
+
+    const [files, act, log] = await Promise.all([
+      api('/api/files?limit=200' + (search ? '&q=' + encodeURIComponent(search) : '')),
+      api('/api/activity?days=' + days),
+      api('/api/log?lines=200'),
+    ]);
+
+    renderRows(files);
+    activity = act;
+    charts[0].inst.setOption(activityOption());
+    renderLog(log);
+
+    document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    offline = true;
+    setConnection('red', 'Offline');
+  }
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────────
+async function rescan() {
+  try {
+    // HttpListener answers 411 to a POST with no Content-Length, so send a body.
+    await api('/api/rescan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    WatsUI.showToast('Rescan started — the source folder is being walked in full.', 'info');
+    refresh();
+  } catch (err) {
+    WatsUI.showToast(err.message, 'error');
+  }
+}
+
+document.getElementById('btn-rescan').addEventListener('click', rescan);
+document.getElementById('btn-rescan-empty').addEventListener('click', rescan);
+document.getElementById('days').addEventListener('change', refresh);
+
+let searchTimer;
+document.getElementById('search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(refresh, 250);
+});
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+// The form edits a parsed copy of the real appsettings.json and writes the whole
+// object back, so any key the form does not model survives a save untouched.
+let configDoc = null;
+
+const $ = id => document.getElementById(id);
+
+/** Reads the watch list out of either shape the file may use. */
+function sourceFoldersOf(doc) {
+  if (Array.isArray(doc.SourceFolders) && doc.SourceFolders.length) {
+    return doc.SourceFolders.filter(s => String(s || '').trim());
+  }
+  return doc.SourceFolder ? [doc.SourceFolder] : [''];
+}
+
+function addSourceRow(value) {
+  const row = document.createElement('div');
+  row.className = 'lfc-source-row';
+  row.innerHTML = `
+    <input type="text" class="wats-input wats-mono lfc-source-input"
+           placeholder="C:\\Logs\\Input   or   \\\\server\\share\\logs">
+    <button type="button" class="wats-icon-btn lfc-source-remove" title="Remove this folder">
+      <span class="material-icons-round mi">close</span>
+    </button>`;
+  row.querySelector('input').value = value || '';
+  row.querySelector('.lfc-source-remove').addEventListener('click', () => {
+    row.remove();
+    // Never leave zero rows — an empty list is not a valid configuration, and a
+    // form you cannot type into is worse than one with a blank field.
+    if (!document.querySelectorAll('.lfc-source-row').length) addSourceRow('');
+    refreshJsonPreview();
+  });
+  row.querySelector('input').addEventListener('input', () => { showConfigError(null); refreshJsonPreview(); });
+  $('cfg-sources').appendChild(row);
+}
+
+function fillSettingsForm(doc) {
+  const log = doc.Logging || {};
+  const dash = doc.Dashboard || {};
+
+  $('cfg-sources').innerHTML = '';
+  sourceFoldersOf(doc).forEach(addSourceRow);
+
+  $('cfg-target').value = doc.TargetFolder || '';
+  $('cfg-filter').value = doc.Filter || '*.*';
+  $('cfg-rename').value = (doc.RenameStrategy || 'counter').toLowerCase();
+  $('cfg-delay').value = doc.FileCreatedDelayMs != null ? doc.FileCreatedDelayMs : 1000;
+  $('cfg-rescan').value = doc.PeriodicRescanMinutes != null ? doc.PeriodicRescanMinutes : 0;
+  $('cfg-subdirs').checked = !!doc.IncludeSubdirectories;
+  $('cfg-db').value = doc.DatabasePath || 'copied.db';
+
+  $('cfg-loglevel').value = log.LogLevel || 'Information';
+  $('cfg-rolling').value = log.RollingInterval || 'Day';
+  $('cfg-retain').value = log.RetainedFileCountLimit != null ? log.RetainedFileCountLimit : 10;
+  $('cfg-logfile').value = log.LogFilePath || 'log.txt';
+
+  $('cfg-url').value = dash.UrlPrefix || 'http://localhost:8787/';
+  $('cfg-allowedit').checked = dash.AllowConfigEdit !== false;
+  $('cfg-openbrowser').checked = !!dash.OpenBrowserOnStart;
+}
+
+/** Merges the form back into the loaded document and returns it. */
+function collectSettingsForm() {
+  const doc = JSON.parse(JSON.stringify(configDoc));
+  doc.Logging = doc.Logging || {};
+  doc.Dashboard = doc.Dashboard || {};
+
+  // Always write the list form; drop the legacy single key so the file has one
+  // source of truth rather than two that can disagree.
+  doc.SourceFolders = Array.from(document.querySelectorAll('.lfc-source-input'))
+    .map(el => el.value.trim())
+    .filter(Boolean);
+  delete doc.SourceFolder;
+
+  doc.TargetFolder = $('cfg-target').value.trim();
+  doc.Filter = $('cfg-filter').value.trim() || '*.*';
+  doc.RenameStrategy = $('cfg-rename').value;
+  doc.FileCreatedDelayMs = Number($('cfg-delay').value) || 0;
+  doc.PeriodicRescanMinutes = Number($('cfg-rescan').value) || 0;
+  doc.IncludeSubdirectories = $('cfg-subdirs').checked;
+  doc.DatabasePath = $('cfg-db').value.trim() || 'copied.db';
+
+  doc.Logging.LogLevel = $('cfg-loglevel').value;
+  doc.Logging.RollingInterval = $('cfg-rolling').value;
+  doc.Logging.RetainedFileCountLimit = Number($('cfg-retain').value) || 10;
+  doc.Logging.LogFilePath = $('cfg-logfile').value.trim() || 'log.txt';
+
+  let url = $('cfg-url').value.trim() || 'http://localhost:8787/';
+  if (!url.endsWith('/')) url += '/';
+  doc.Dashboard.UrlPrefix = url;
+  doc.Dashboard.AllowConfigEdit = $('cfg-allowedit').checked;
+  doc.Dashboard.OpenBrowserOnStart = $('cfg-openbrowser').checked;
+
+  return doc;
+}
+
+/** Checks the form can produce a config the collector will accept. */
+function validateSettings(doc) {
+  const norm = p => String(p || '').replace(/[\\/]+$/, '').toLowerCase();
+
+  if (!doc.SourceFolders.length) return 'At least one source folder is required.';
+  if (!doc.TargetFolder) return 'A target folder is required.';
+
+  const seen = new Set();
+  for (const source of doc.SourceFolders) {
+    if (norm(source) === norm(doc.TargetFolder)) {
+      return 'A source folder must not be the same as the target folder, or the collector would copy files onto themselves: ' + source;
+    }
+    if (seen.has(norm(source))) return 'The same source folder is listed twice: ' + source;
+    seen.add(norm(source));
+  }
+  if (doc.FileCreatedDelayMs < 0) return 'The settle delay cannot be negative.';
+  if (doc.PeriodicRescanMinutes < 0) return 'The rescan interval cannot be negative.';
+  if (!/^https?:\/\/[^/]+\//.test(doc.Dashboard.UrlPrefix)) {
+    return 'The dashboard address must look like http://localhost:8787/.';
+  }
+  return null;
+}
+
+function refreshJsonPreview() {
+  try {
+    $('config-json').value = JSON.stringify(collectSettingsForm(), null, 2);
+  } catch { /* the form is mid-edit; the preview catches up on the next change */ }
+}
+
+function showConfigError(message) {
+  const box = $('config-error');
+  box.style.display = message ? '' : 'none';
+  box.textContent = message || '';
+}
+
+async function loadSettings() {
+  showConfigError(null);
+  try {
+    const cfg = await api('/api/config');
+    $('config-path').textContent = cfg.path;
+    configDoc = JSON.parse(cfg.json);
+    fillSettingsForm(configDoc);
+    refreshJsonPreview();
+
+    // Read-only when the collector was configured to refuse remote edits.
+    document.querySelectorAll('#config-backdrop input, #config-backdrop select')
+      .forEach(el => { el.disabled = !cfg.editable; });
+    $('btn-save-config').disabled = !cfg.editable;
+    $('config-hint').textContent = cfg.editable
+      ? 'The collector reads its settings at startup — restart it to apply.'
+      : 'Settings are read-only (Dashboard.AllowConfigEdit is false).';
+  } catch (err) {
+    showConfigError(err.message);
+  }
+}
+
+document.querySelector('[data-modal-open="config"]').addEventListener('click', loadSettings);
+
+$('cfg-add-source').addEventListener('click', () => {
+  addSourceRow('');
+  const rows = document.querySelectorAll('.lfc-source-input');
+  rows[rows.length - 1].focus();
+  refreshJsonPreview();
+});
+
+document.querySelectorAll('#config-backdrop input, #config-backdrop select')
+  .forEach(el => el.addEventListener('input', () => { showConfigError(null); refreshJsonPreview(); }));
+
+$('btn-save-config').addEventListener('click', async () => {
+  const doc = collectSettingsForm();
+  const problem = validateSettings(doc);
+  if (problem) { showConfigError(problem); return; }
+
+  try {
+    await api('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(doc, null, 2),
+    });
+    configDoc = doc;
+    WatsUI.closeModal('config');
+    WatsUI.showToast('Saved. Restart the collector — "Restart service" in the tray icon menu — to apply it.', 'success', 9000);
+  } catch (err) {
+    showConfigError(err.message);
+  }
+});
+
+mountChart('chart-activity', activityOption);
+refresh();
+setInterval(refresh, POLL_MS);
+
+// The tray's "Settings..." and the Start Menu link open /#settings, so land
+// straight on the form rather than making people find the gear.
+function openSettingsFromHash() {
+  if (location.hash !== '#settings') return;
+  loadSettings().then(() => WatsUI.openModal('config'));
+}
+window.addEventListener('hashchange', openSettingsFromHash);
+openSettingsFromHash();
+</script>
+</body>
+</html>

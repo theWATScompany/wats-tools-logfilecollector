@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    System-tray companion to the collector service.
+
+    A Windows service runs in session 0 and cannot show UI, so the tray icon has to
+    live in a separate process inside the user's session. It holds no collector
+    logic: it polls the service's own dashboard API over loopback, which is the
+    same API the browser dashboard uses.
+
+    net48 only â€” it is a WinForms tray app for Windows, and it is installed by the
+    MSI next to the net48 service build.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>LogFileCollector.Tray</RootNamespace>
+    <AssemblyName>LogFileCollectorTray</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>..\Assets\WatsBee.ico</ApplicationIcon>
+    <Version>1.5.1</Version>
+    <AssemblyVersion>1.5.1.0</AssemblyVersion>
+    <FileVersion>1.5.1.0</FileVersion>
+    <Product>WATS Log File Collector Tray</Product>
+    <Company>The WATS Company AS</Company>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="10.0.0-rc.1.25451.107" />
+    <!-- Hosts the dashboard in an application window. The Evergreen runtime ships
+         with Windows 11 and with Edge on Windows 10; the window falls back to the
+         default browser when it is missing. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\Assets\WatsBee.ico" Link="WatsBee.ico" />
+  </ItemGroup>
+
+</Project>
+
