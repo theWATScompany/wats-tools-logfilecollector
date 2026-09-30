@@ -1,0 +1,34 @@
+﻿Virinco Software License Agreement
+
+EFFECTIVE DATE: 01.01.2025
+
+This License Agreement ("Agreement") is between you (an individual or entity) and Virinco AS ("Licensor") regarding the use of the freeware software program ("Software") and its associated source code.
+
+1. GRANT OF LICENSE
+- You are granted a non-exclusive, non-transferable license to use the Software, including its source code, for personal or commercial purposes, free of charge.
+- You may modify the source code for your own use and submit contributions (e.g., pull requests) back to the official repository.
+- Acceptance and incorporation of such contributions is at the sole discretion of Virinco AS.
+
+2. OWNERSHIP
+- The Software, including any accepted modifications, is and shall remain the property of Virinco AS.
+- By submitting contributions, you grant Virinco AS a perpetual, irrevocable right to use, modify, and redistribute your contributions as part of the Software without obligation of compensation or additional attribution.
+
+3. RESTRICTIONS
+- You may not redistribute, sublicense, or sell the Software or derivative works outside the official Virinco AS distribution channels.
+- You may not present modified versions as official Virinco products without prior written permission.
+
+4. NO WARRANTY
+The Software is provided "AS IS", without warranties of any kind, express or implied. Virinco AS makes no guarantee that the Software will meet your requirements or operate without error.
+
+5. LIMITATION OF LIABILITY
+In no event shall Virinco AS be liable for any direct, indirect, incidental, special, or consequential damages arising out of the use or inability to use the Software.
+
+6. TERMINATION
+This Agreement terminates automatically if you fail to comply with its terms. Upon termination, you must cease all use of the Software and destroy all copies in your possession.
+
+7. GENERAL PROVISIONS
+This Agreement is the entire agreement between you and Virinco AS regarding the Software and supersedes prior agreements.
+It shall be governed by and construed in accordance with the laws of Norway.
+If any provision is found invalid, the remaining terms remain in full effect.
+
+By using or modifying the Software, you acknowledge that you have read and understood this Agreement and agree to be bound by its terms.

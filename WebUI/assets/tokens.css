@@ -1,0 +1,112 @@
+/*
+ * WATS Design Tokens — CSS Custom Properties
+ * Generated from: tokens.json
+ * Version: 1.0
+ *
+ * Usage:
+ *   Dark theme  — default, or add data-theme="dark"  on <html>
+ *   Light theme — add data-theme="light" on <html>
+ *
+ * Both themes are available simultaneously; switching is a single attribute change.
+ */
+
+/* ─── Dark theme (default) ─────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg:      #202020;
+  --card:    #282828;
+  --ch:      #303030;
+  --ia:      #424242;
+  --hv:      #525252;
+  --bd:      #181818;
+  --sidebar: #202020;
+  --f:       #eeeeee;
+  --fs:      #c0c0c0;
+  --fd:      #888888;
+  --p:       #fdc400;   /* accent / primary */
+  --g:       #66c866;   /* green  / pass     */
+  --r:       #ee5757;   /* red    / fail      */
+  --o:       #ec9831;   /* orange / warn      */
+  --b:       #318ce7;   /* blue   / info      */
+
+  --shadow-card:    0 2px 8px rgba(0,0,0,.4);
+  --shadow-popover: 0 4px 16px rgba(0,0,0,.5);
+  --shadow-modal:   0 8px 32px rgba(0,0,0,.6);
+
+  color-scheme: dark;
+}
+
+/* ─── Light theme ───────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg:      #f0f0f0;
+  --card:    #ffffff;
+  --ch:      #e8e8e8;
+  --ia:      #d0d0d0;
+  --hv:      #c0c0c0;
+  --bd:      #e0e0e0;
+  --sidebar: #1a1a1a;
+  --f:       #1a1a1a;
+  --fs:      #444444;
+  --fd:      #888888;
+  --p:       #fdc400;
+  --g:       #2e9e2e;
+  --r:       #cc2222;
+  --o:       #d47a00;
+  --b:       #1a6fc4;
+
+  --shadow-card:    0 1px 4px rgba(0,0,0,.10);
+  --shadow-popover: 0 4px 12px rgba(0,0,0,.15);
+  --shadow-modal:   0 8px 24px rgba(0,0,0,.20);
+
+  color-scheme: light;
+}
+
+/* ─── Typography scale ──────────────────────────────────────────────────────── */
+:root {
+  --font-base:    Inter, system-ui, sans-serif;
+  --font-display: Poppins, sans-serif;
+  --font-mono:    Consolas, 'Courier New', monospace;
+
+  --sz-base:  0.8rem;   /* 13px at 16px root */
+  --sz-h1:    1.375rem; /* 22px */
+  --sz-h2:    0.9375rem;/* 15px */
+  --sz-h3:    0.85rem;  /* 13.6px  (added: wats.css references it, upstream tokens.css omitted it) */
+  --sz-label: 0.75rem;  /* 12px */
+  --sz-dim:   0.6875rem;/* 11px */
+  --sz-small: 0.6875rem;
+
+  --ls-body:  0.15px;
+  --ls-label: 0.4px;
+  --ls-caps:  0.5px;
+}
+
+/* ─── Geometry ──────────────────────────────────────────────────────────────── */
+:root {
+  --rad:      5px;
+  --rad-btn:  4px;
+  --rad-sm:   3px;
+
+  --nav-h:    48px;
+  --hdr-h:    32px;
+  --sw:       240px;    /* sidebar width */
+  --sw-icon:  48px;     /* sidebar icon-only width */
+
+  --t-fast:   0.12s ease;
+  --t-norm:   0.15s ease;
+  --t-slow:   0.2s ease;
+  --t-sb:     0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Chart palette (exposed for JS use) ────────────────────────────────────── */
+:root {
+  --chart-0: #6d82a2;
+  --chart-1: #776398;
+  --chart-2: #8b607c;
+  --chart-3: #ac636a;
+  --chart-4: #c16c5f;
+  --chart-5: #d97b4c;
+  --chart-6: #d18732;
+  --chart-7: #99954b;
+  --chart-8: #509b8c;
+  --chart-9: #62959e;
+}
